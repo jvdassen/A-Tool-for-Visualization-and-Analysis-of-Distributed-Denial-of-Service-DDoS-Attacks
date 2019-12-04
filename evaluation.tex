@@ -1,2 +1,22 @@
 \chapter{Evaluation}
 
+\section{Evaluation}
+\section{Future Work}
+This paper describes the implementation of a general-purpose DDoS visualization system. It has been implemented requirements in mind such as agnositicity to scale and type of attack and the software and location of network capture.
+The prototypical implementation has covered visualizations such as x, y, z (??) and used a PCAP files as a data source.
+The architecture and design of the system have been written with extensibility in mind, which should allow that the following subsystems of the solution could easily be adapted, exchanged or extended:
+\begin{itemize}
+
+    \item Data source: The application was targeted to use PCAP files, since they are the most common in DDoSDB, a collection of network attacks. A common format that enables similar insights into network traffic flow is NetFlow. In the analysis of possible data sets we found that NetFlow files could also be used as a data source. By complying with the systems architecture consisting of interfaces and a Visitor pattern one could provide an alternate, Netflow-based data source parser.
+    
+    \item Data pre-processing: The implementation can be used with network logs from DDoSDB, which are already anonymised. If a raw packet capture is supplied the same pre-processing is applied. Given certain constraints such as data privacy laws, this part could be easily extended.
+    
+    \item Data processing / parsing:
+    Creating new analysis processors for the existing PCAP-files would be very easy to write. The user would simply have to register a new visitor and comply with the interfaces or extend them for novel visualizations. For example, assuming that a new application-level protocol would be targeted, the visitor can be registered to be invoked for those types of packets and compute his metrics.
+   
+    \item Data integration:
+    The system is not integrated with DDoSDB in a fully automated manner due to lack of interfaces. Technically, it would be possible to integrate the uploading  of processed files to DDoSDB or the download such files.
+    
+    \item Visualizations
+    The part that is easiest to adapt and extend is the set of visualizations. Since the front-end was written with a component-based approach one can easily reuse and change the visualizations. By adhering to the dataset a developer can easily create new components and integrate them into the system without having to know all too much about the systems internals, such as the data processing.
+\end{itemize}
