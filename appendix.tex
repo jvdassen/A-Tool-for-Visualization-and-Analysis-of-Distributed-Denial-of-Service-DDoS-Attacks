@@ -2,4 +2,160 @@
 
 \chapter{Installation Guidelines}
 
+\section{Introduction}
+
+This tool consist of three parts:
+
+\begin{itemize}
+    \item The \textit{miner} subproject is a packet decoder and feature extractor that produces output as JSON files and communicates over stdout or an IPC channel if available.
+    \item \textit{api} is a RESTful api based on Express.js which orchestrates the \textit{miner} package if required.
+    \item The \textit{frontend} is a Vue.js based SPA that renders visualizations obtained from the api.
+\end{itemize}{}
+
+\section{Development Installation}
+Clone the project from github, this will contain all three subprojects:
+\begin{lstlisting}[caption={},label={lst:formattinganalysis}]
+git clone git@github.com:ddosgrid/ddos-visualization.git
+\end{lstlisting}
+
+\subsubsection{Miner}
+Enter the \textit{miner} subproject and install the necessary dependencies. Make sure you are running Node.JS version 10 and that you lave libpcap installed.
+\begin{lstlisting}[caption={},label={}]
+cd miner
+npm i
+\end{lstlisting}
+
+After that the miner package can be imported as an NPM module or it can be run manually through the shell. Alternatively one can use the miner as a subprocess where it will communicate over an IPC channel.
+For example to run it through a shell:
+\begin{lstlisting}
+
+node index.js pcap_path=/path/to/your/pcap-file
+\end{lstlisting}{}
+This will run the miner which will render its result to stdout:
+\begin{lstlisting}
+node index.js pcap_path=/path/to/your/capture.pcap
+
+- Input check completed
+- Analysis started
+- Setup of the following miners has completed:
+	- Miscellaneous Metrics
+	- Top 20 UPD/TCP ports by number of segments
+	- Number of segments received over all TCP/UDP ports
+	- Connection states of TCP segments
+	- Analysis of IPv4 vs IPv6 traffic (based on packets)
+	- Top 5 source hosts (IPv4)
+	- Top 100 source hosts (IPv4)
+- Decoding has finished, starting post-parsing analysis
+- All miners have finished.
+
+\end{lstlisting}
+Alternatively one may run it as a subprocess and thus integrate it into another application using IPC communication between the two:
+\begin{lstlisting}
+
+const child_process = require('child_process')
+const fork = child_process.fork
+const path = require('path')
+
+// Options to run the miner as subprocess
+var program = path.resolve('../miner/index.js')
+var args = [ `pcap_path=${pcapPath}` ]
+var options = { stdio: [ 'ipc' ] }
+
+var childProcess = fork(program, args, options)
+
+// Once the miner finishes he will send a 'message' with file paths
+// pointing to the analysis results
+childProcess.on('message', function (minerResults) {
+  var parsedResults = JSON.parse(minerResults)
+  // Do something with the JSON files
+})
+childProcess.on('exit', (code) => {
+  if(code !== 0) {
+    // Something went wrong
+  }
+})
+\end{lstlisting}{}
+
+\subsubsection{API}
+Setting up the api is straightforward, simply fetch the dependencies and start the main javascript file. Make sure that you have previously installed the dependencies of the miner!
+\begin{lstlisting}
+cd miner; npm i; cd ..;
+cd api; npm i
+\end{lstlisting}{}
+Now simply start it and optionally pass the port where it should listen:
+\begin{lstlisting}
+node index.js
+\end{lstlisting}{}
+or
+\begin{lstlisting}
+export PORT=1234; node index.js
+\end{lstlisting}{}
+
+\subsection{Frontend}
+Enter the `frontend` subproject and run it after fetching its dependencies
+\begin{lstlisting}
+npm i; npm run serve
+\end{lstlisting}{}
+This will automatically rebuild the project if a file changes. 
+To use the application you will need to let it connect to an api instance.
+In development mode (\textit{npm run serve}) it will always connect to \textit{localhost:3000}.
+You can run the api locally as described in the previous section or if you don't plan to work on the backend part you can just run the latest image from Docker hub with one command:
+\begin{lstlisting}
+docker run -it -p 3000:3000 ddosgrid/ddosgrid-api
+\end{lstlisting}{}
+
+\section{Production Installation}
+\subsection{Frontend}
+Our frontend is continuosly integrated and deployed by a GitHub action to a GitHub pages branch.
+If you are building manually simply run \textit{npm run build} and then deploy the \textit{dist} folder to your web server.
+This will create a frontend that automatically connects to our hostname in production. If you want to change the hostname of the API that is used in production please edit \textit{frontend/.env.production}.
+
+\subsection{API}
+Our api is continuosly integrated and built as a Docker image and pushed to that registry.
+From there you can run it with one command if you have \textit{docker-compose} and \textit{docker} installed:
+\begin{lstlisting}
+cd api; docker-compose up
+\end{lstlisting}{}
+
+To get a continuos style of integratin we simply pull the docker file in a 5minute time interval from Docker Hub and then redeploy the service using CRON:
+\begin{lstlisting}
+*/5 * * * * docker pull ddosgrid/ddosgrid-api:latest; docker service update ddosgridapi_ddosgridapi --image ddosgrid/ddosgrid-api:latest
+\end{lstlisting}
+
+This docker compose file will run the API on local interface and also expose it as a TOR service. You can then connect to that onion service or place a reverse-proxy in front of the local server. With NGINX, this would look as follows:
+
+\begin{lstlisting}
+server {
+  listen       443 ssl;
+  server_name  your-server-name;
+
+  # Configure max upload size
+  client_max_body_size 1G;
+
+  # Configure SSL
+  ssl_certificate      /path/to/your/ssl/cert;
+  ssl_certificate_key  /path/to/your/ssl/key;
+  
+  # Proxy to the locally running server
+  location / {
+    proxy_pass http://localhost:3000;
+  }
+}
+\end{lstlisting}
+\subsection{Security considerations}
+
+Since we don't want that our server can be accessed directly without going through the proxy, we recommend blocking external access. Otherwise one could e.g. surpass the file size limit.
+This can be done by configuring a docker network or the way we do it using iptables:
+This would drop all packets destined to our server that are being sent from outside our host and would accept traffic to our server coming from our NGINX instance:
+
+\begin{lstlisting}
+# Change these accordingly
+local_server_port=3000
+inbound_wan_interface=eth0
+
+iptables -I FORWARD --protocol tcp --destination-port $local_server_port -j DROP -i $inbound_wan_interface
+\end{lstlisting}
+
+
 \chapter{Contents of the CD}
+The CD contains the project source code which covers all three subprojects, installation instructions and deployment related artifacts like a Dockerfile.
